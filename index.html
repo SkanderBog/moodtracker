@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mood Tracker</title>
+<style>
+  /* ------------------------------------------------------------------ */
+  /* Design tokens — light/dark swap in one place                        */
+  /* ------------------------------------------------------------------ */
+  :root {
+    color-scheme: light;
+    --page:      #f9f9f7;
+    --surface:   #fcfcfb;
+    --ink:       #0b0b0b;
+    --ink-2:     #52514e;
+    --muted:     #898781;
+    --grid:      #e1e0d9;
+    --axis:      #c3c2b7;
+    --ring:      rgba(11,11,11,0.10);
+    --bar-bg:    rgba(252,252,251,0.82);
+
+    /* Mood ramp: sad (cool blue) -> neutral (gray) -> happy (warm orange) */
+    --mood1: #1c5cab;   /* very sad  */
+    --mood2: #86b6ef;   /* sad       */
+    --mood3: #898781;   /* neutral   */
+    --mood4: #f0a35a;   /* happy     */
+    --mood5: #eb6834;   /* very happy */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page:      #0d0d0d;
+      --surface:   #1a1a19;
+      --ink:       #ffffff;
+      --ink-2:     #c3c2b7;
+      --muted:     #898781;
+      --grid:      #2c2c2a;
+      --axis:      #383835;
+      --ring:      rgba(255,255,255,0.10);
+      --bar-bg:    rgba(26,26,25,0.82);
+
+      --mood1: #5598e7;
+      --mood2: #9ec5f4;
+      --mood3: #b8b7b1;
+      --mood4: #f0a35a;
+      --mood5: #eb6834;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding-top: 72px;          /* clears the fixed bar */
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Floating bar                                                        */
+  /* ------------------------------------------------------------------ */
+  #bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: var(--bar-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--ring);
+  }
+  #bar .title { font-weight: 650; letter-spacing: -0.01em; white-space: nowrap; margin-right: 4px; }
+  #bar .moods { display: flex; gap: 8px; flex: 1 1 auto; flex-wrap: wrap; }
+  .mood {
+    --mood: var(--mood3);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--ring);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-size: 14px;
+    cursor: pointer;
+    transition: transform .08s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease;
+  }
+  .mood .emo { font-size: 17px; line-height: 1; }
+  .mood:hover {
+    background: color-mix(in srgb, var(--mood) 13%, var(--surface));
+    border-color: color-mix(in srgb, var(--mood) 55%, var(--ring));
+    transform: translateY(-1px);
+  }
+  .mood:active { transform: translateY(0) scale(.97); }
+  .mood.active {
+    background: color-mix(in srgb, var(--mood) 18%, var(--surface));
+    border-color: var(--mood);
+    box-shadow: 0 0 0 1px var(--mood) inset;
+  }
+  .mood.pop { animation: pop .3s ease; }
+  @keyframes pop { 0% { transform: scale(1); } 45% { transform: scale(1.12); } 100% { transform: scale(1); } }
+
+  #bar .tools { display: flex; gap: 8px; align-items: center; }
+  .tool {
+    padding: 7px 12px; border-radius: 999px;
+    border: 1px solid var(--ring); background: var(--surface);
+    color: var(--ink-2); font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap;
+  }
+  .tool:hover { background: color-mix(in srgb, var(--ink) 7%, var(--surface)); color: var(--ink); }
+  .tool:disabled { opacity: .4; cursor: default; }
+
+  .conn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); padding: 6px 11px; border: 1px solid var(--ring); border-radius: 999px; white-space: nowrap; }
+  .conn .dot { width: 8px; height: 8px; border-radius: 50%; background: #c3c2b7; }
+  .conn.online { color: var(--ink-2); }
+  .conn.online .dot { background: #0ca30c; }
+
+  /* ------------------------------------------------------------------ */
+  /* Toast + optional "why" note                                         */
+  /* ------------------------------------------------------------------ */
+  #toast {
+    position: fixed; top: 70px; left: 50%;
+    transform: translateX(-50%) translateY(-8px);
+    background: var(--ink); color: var(--surface);
+    padding: 8px 16px; border-radius: 999px; font-size: 13px;
+    opacity: 0; pointer-events: none;
+    transition: opacity .18s ease, transform .18s ease;
+    z-index: 200; white-space: nowrap;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  #whyBox {
+    position: fixed; top: 70px; right: 20px; z-index: 150;
+    opacity: 0; pointer-events: none; transition: opacity .15s ease;
+  }
+  #whyBox.show { opacity: 1; pointer-events: auto; }
+  #whyBox input {
+    font: inherit; font-size: 13px; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--ring); border-radius: 10px;
+    padding: 8px 12px; width: 220px; outline: none;
+    box-shadow: 0 4px 16px rgba(0,0,0,.15);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Main content                                                        */
+  /* ------------------------------------------------------------------ */
+  main { max-width: 880px; margin: 0 auto; padding: 20px 20px 60px; }
+
+  .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .head h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+  .head .sub { color: var(--muted); font-size: 13px; }
+  .head .right { display: flex; align-items: center; gap: 10px; }
+  #daySelect {
+    font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 8px;
+    border: 1px solid var(--ring); background: var(--surface); color: var(--ink);
+  }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .stat { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 12px 14px; }
+  .stat .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .stat .v { font-size: 20px; font-weight: 650; margin-top: 4px; }
+  .stat .v .emo { font-size: 18px; }
+  .stat .v small { font-weight: 400; color: var(--muted); font-size: 13px; }
+
+  .takeaway { font-size: 14px; color: var(--ink-2); margin: 0 0 16px; padding: 10px 14px; border-radius: 10px; background: color-mix(in srgb, var(--ink) 4%, var(--surface)); }
+
+  #chartWrap { position: relative; }
+  #chart { width: 100%; height: auto; display: block; }
+  #tooltip {
+    position: absolute; display: none; pointer-events: none;
+    background: var(--ink); color: var(--surface); padding: 5px 10px;
+    border-radius: 8px; font-size: 12.5px; white-space: nowrap; z-index: 50;
+  }
+
+  .list { margin-top: 22px; }
+  .list h2 { font-size: 15px; margin: 0 0 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  td.time { font-variant-numeric: tabular-nums; color: var(--ink-2); white-space: nowrap; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 7px; }
+  .why { color: var(--muted); font-size: 12.5px; font-style: italic; margin-top: 2px; }
+  td.del { width: 40px; text-align: right; }
+  td.del button { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 2px 6px; border-radius: 6px; }
+  td.del button:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
+
+  .empty { text-align: center; color: var(--muted); padding: 60px 20px; }
+  .empty .big { font-size: 40px; display: block; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+
+  <header id="bar">
+    <span class="title">🌤 Mood</span>
+    <div class="moods" id="moods"></div>
+    <div class="tools">
+      <span class="conn" id="conn" title=""><span class="dot"></span><span id="connLabel">Connecting…</span></span>
+      <button class="tool" id="exportBtn" title="Download all entries as CSV">Export</button>
+      <button class="tool" id="clearBtn" title="Delete everything (asks first)">Clear</button>
+    </div>
+  </header>
+
+  <div id="toast"></div>
+  <div id="whyBox"><input id="whyInput" placeholder="Why? (optional) — Enter to save" /></div>
+
+  <main>
+    <div class="head">
+      <div>
+        <h1 id="periodTitle">Today</h1>
+        <div class="sub" id="periodSub">—</div>
+      </div>
+      <div class="right">
+        <select id="daySelect" aria-label="Choose time period"></select>
+      </div>
+    </div>
+
+    <div class="stats" id="stats"></div>
+    <p class="takeaway" id="takeaway" hidden></p>
+
+    <div id="chartWrap">
+      <svg id="chart" viewBox="0 0 880 380" role="img" aria-label="Mood over time"></svg>
+      <div id="tooltip"></div>
+    </div>
+
+    <div class="list">
+      <h2>Log</h2>
+      <div id="listBody"></div>
+    </div>
+  </main>
+
+  <script src="client-store.js"></script>
+  <script>
+  "use strict";
+
+  const GAP_MS = 2 * 60 * 60 * 1000;
+  const MOODS = [
+    { level: 1, emoji: "😢", label: "Very sad",  color: "var(--mood1)" },
+    { level: 2, emoji: "🙁", label: "Sad",       color: "var(--mood2)" },
+    { level: 3, emoji: "😐", label: "Neutral",   color: "var(--mood3)" },
+    { level: 4, emoji: "🙂", label: "Happy",     color: "var(--mood4)" },
+    { level: 5, emoji: "😄", label: "Very happy",color: "var(--mood5)" },
+  ];
+  const mood = (m) => MOODS[m - 1];
+  const store = window.MoodStore;
+  const genId = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + "-" + Math.random().toString(36).slice(2));
+
+  let state = { entries: [] };
+
+  /* ---- small helpers -------------------------------------------------- */
+  const pad = (n) => String(n).padStart(2, "0");
+  function dayKey(ts) { const d = new Date(ts); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+  function todayKey() { return dayKey(Date.now()); }
+  function yesterdayKey() { return dayKey(Date.now() - 86400000); }
+  function fmtTime(ts) { return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
+  function fmtTimeFull(ts) { return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }); }
+  function fmtDate(key) {
+    if (key === todayKey()) return "Today";
+    if (key === yesterdayKey()) return "Yesterday";
+    const [y, m, d] = key.split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+  }
+  function fmtDuration(ms) {
+    const s = Math.round(ms / 1000);
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m}m`;
+    return `${Math.floor(m / 60)}h ${m % 60}m`;
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+  function distinctDays() { return [...new Set(state.entries.map(e => dayKey(e.t)))].sort().reverse(); }
+  function visibleEntries() {
+    const sel = document.getElementById("daySelect").value;
+    if (sel === "all") return state.entries;
+    return state.entries.filter(e => dayKey(e.t) === sel);
+  }
+
+  /* ---- connection badge ---------------------------------------------- */
+  function setConn(online) {
+    const el = document.getElementById("conn");
+    el.classList.toggle("online", online);
+    el.title = online ? "Shared log online" : "Server not running — changes saved only in this tab";
+    document.getElementById("connLabel").textContent = online ? "Shared" : "Local only";
+  }
+
+  /* ---- actions -------------------------------------------------------- */
+  function logMood(level) {
+    const entry = { id: genId(), t: Date.now(), m: level };
+    state.entries.push(entry);
+    store.add(entry);                       // fire-and-forget persist
+
+    const btn = document.querySelector(`.mood[data-mood="${level}"]`);
+    btn.classList.remove("pop");
+    void btn.offsetWidth;
+    btn.classList.add("pop");
+
+    showToast(`${mood(level).emoji} ${mood(level).label} — ${fmtTimeFull(Date.now())}`);
+    render();
+    askWhy(entry);
+  }
+
+  function askWhy(entry) {
+    closeWhy();
+    const box = document.getElementById("whyBox");
+    const input = document.getElementById("whyInput");
+    input.value = "";
+    box.classList.add("show");
+    let done = false;
+    const finish = (saveIt) => {
+      if (done) return; done = true;
+      if (saveIt && input.value.trim()) { entry.why = input.value.trim(); store.update(entry.id, { why: entry.why }); render(); }
+      box.classList.remove("show");
+    };
+    input.onkeydown = (e) => {
+      if (e.key === "Enter") { e.preventDefault(); finish(true); }
+      else if (e.key === "Escape") finish(false);
+    };
+    input.onblur = () => finish(input.value.trim() !== "");
+    input.focus();
+  }
+  function closeWhy() { const b = document.getElementById("whyBox"); if (b) b.classList.remove("show"); }
+
+  function deleteEntry(id) {
+    state.entries = state.entries.filter(e => e.id !== id);
+    store.remove(id);
+    render();
+  }
+  function clearAll() {
+    if (state.entries.length === 0) return;
+    if (!confirm("Delete ALL mood history? This cannot be undone.")) return;
+    state.entries = [];
+    store.clear();
+    render();
+  }
+  function exportCsv() {
+    if (state.entries.length === 0) return;
+    const sorted = [...state.entries].sort((a, b) => a.t - b.t);
+    const rows = [["timestamp", "iso", "mood_level", "mood_label", "why"]];
+    for (const e of sorted) rows.push([e.t, new Date(e.t).toISOString(), e.m, mood(e.m).label, e.why || ""]);
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `mood-${todayKey()}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  let toastTimer = null;
+  function showToast(text) {
+    const t = document.getElementById("toast");
+    t.textContent = text;
+    t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove("show"), 1800);
+  }
+
+  /* ---- render --------------------------------------------------------- */
+  function render() { renderBar(); renderHeader(); renderStats(); renderChart(); renderList(); }
+
+  function renderBar() {
+    const wrap = document.getElementById("moods");
+    if (wrap.children.length === 0) {
+      for (const m of MOODS) {
+        const b = document.createElement("button");
+        b.className = "mood";
+        b.dataset.mood = m.level;
+        b.style.setProperty("--mood", m.color);
+        b.innerHTML = `<span class="emo">${m.emoji}</span><span>${m.label}</span>`;
+        b.addEventListener("click", () => logMood(m.level));
+        wrap.appendChild(b);
+      }
+    }
+    const latest = state.entries[state.entries.length - 1];
+    wrap.querySelectorAll(".mood").forEach(b =>
+      b.classList.toggle("active", latest != null && Number(b.dataset.mood) === latest.m));
+    document.getElementById("clearBtn").disabled = state.entries.length === 0;
+    document.getElementById("exportBtn").disabled = state.entries.length === 0;
+  }
+
+  function renderHeader() {
+    const sel = document.getElementById("daySelect");
+    const days = distinctDays();
+    const prev = sel.value || days[0] || "all";
+    sel.innerHTML = days.map(d => `<option value="${d}">${fmtDate(d)}</option>`).join("") +
+      `<option value="all">All time</option>`;
+    sel.value = days.includes(prev) || prev === "all" ? prev : (days[0] || "all");
+    document.getElementById("periodTitle").textContent = sel.value === "all" ? "All time" : fmtDate(sel.value);
+  }
+
+  function renderStats() {
+    const entries = visibleEntries().sort((a, b) => a.t - b.t);
+    const box = document.getElementById("stats");
+    const sub = document.getElementById("periodSub");
+    const takeaway = document.getElementById("takeaway");
+    if (entries.length === 0) { box.innerHTML = ""; sub.textContent = "No moods logged yet."; takeaway.hidden = true; return; }
+
+    const first = entries[0], last = entries[entries.length - 1];
+    const duration = last.t - first.t;
+    const avg = entries.reduce((s, e) => s + e.m, 0) / entries.length;
+    const avgMood = mood(Math.round(avg));
+    sub.textContent = `${entries.length} log${entries.length === 1 ? "" : "s"} · ${fmtTime(first.t)} – ${fmtTime(last.t)}`;
+
+    box.innerHTML = [
+      tile("Entries", `${entries.length}`),
+      tile("Duration", `${fmtDuration(duration)}`),
+      tile("Average", `${avgMood.emoji} ${avgMood.label}`, `(${avg.toFixed(1)} / 5)`),
+      tile("Latest", `${mood(last.m).emoji} ${mood(last.m).label}`),
+    ].join("");
+
+    const allSame = entries.every(e => e.m === entries[0].m);
+    const diff = last.m - first.m;
+    let msg;
+    if (entries.length === 1)  msg = "Just one log so far — keep clicking as you go.";
+    else if (allSame)          msg = `A steady ${mood(entries[0].m).label.toLowerCase()} stretch.`;
+    else if (diff > 0)         msg = "You ended up happier than you started.";
+    else if (diff < 0)         msg = "You ended a bit lower than you started — take a breather.";
+    else                       msg = "Started and ended on the same note, with some movement in between.";
+    takeaway.textContent = msg;
+    takeaway.hidden = false;
+  }
+  function tile(k, v, small) {
+    return `<div class="stat"><div class="k">${k}</div><div class="v">${v}${small ? ` <small>${small}</small>` : ""}</div></div>`;
+  }
+
+  function renderChart() {
+    const svg = document.getElementById("chart");
+    svg.innerHTML = "";
+    hideTip();
+    const entries = visibleEntries().sort((a, b) => a.t - b.t);
+    if (entries.length === 0) return;
+
+    const W = 880, H = 380, left = 120, right = 24, top = 24, bottom = 44;
+    const plotW = W - left - right, plotH = H - top - bottom;
+    const tMin = entries[0].t, tMax = entries[entries.length - 1].t;
+    let lo = tMin - Math.max(5 * 60 * 1000, (tMax - tMin) * 0.15);
+    let hi = tMax + Math.max(5 * 60 * 1000, (tMax - tMin) * 0.15);
+    if (hi - lo < 10 * 60 * 1000) { const mid = (lo + hi) / 2; lo = mid - 5 * 60 * 1000; hi = mid + 5 * 60 * 1000; }
+
+    const x = (t) => left + (t - lo) / (hi - lo) * plotW;
+    const y = (lvl) => top + (5 - lvl) * (plotH / 4);
+    const NS = "http://www.w3.org/2000/svg";
+    const el = (tag, attrs) => { const n = document.createElementNS(NS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); return n; };
+
+    for (const m of MOODS) {
+      const yy = y(m.level);
+      svg.appendChild(el("line", { x1: left, y1: yy, x2: W - right, y2: yy, stroke: "var(--grid)", "stroke-width": 1 }));
+      const label = el("text", { x: left - 10, y: yy + 4, "text-anchor": "end", fill: "var(--ink-2)", "font-size": 13 });
+      label.textContent = `${m.emoji} ${m.label}`;
+      svg.appendChild(label);
+    }
+    for (let i = 0; i < 4; i++) {
+      const t = lo + (hi - lo) * (i / 3), xx = x(t);
+      svg.appendChild(el("line", { x1: xx, y1: top, x2: xx, y2: H - bottom, stroke: "var(--grid)", "stroke-width": 1 }));
+      const tick = el("text", { x: xx, y: H - bottom + 22, "text-anchor": "middle", fill: "var(--muted)", "font-size": 12 });
+      tick.textContent = fmtTime(t);
+      svg.appendChild(tick);
+    }
+    svg.appendChild(el("line", { x1: left, y1: H - bottom, x2: W - right, y2: H - bottom, stroke: "var(--axis)", "stroke-width": 1 }));
+
+    for (let i = 0; i < entries.length - 1; i++) {
+      if (entries[i + 1].t - entries[i].t > GAP_MS) continue;
+      svg.appendChild(el("line", { x1: x(entries[i].t), y1: y(entries[i].m), x2: x(entries[i + 1].t), y2: y(entries[i + 1].m), stroke: "var(--axis)", "stroke-width": 2, "stroke-linecap": "round" }));
+    }
+    for (const e of entries) {
+      const dot = el("circle", { cx: x(e.t), cy: y(e.m), r: 6, fill: mood(e.m).color, stroke: "var(--surface)", "stroke-width": 2 });
+      dot.style.cursor = "pointer";
+      dot.addEventListener("mouseenter", () => showTip(dot, e));
+      dot.addEventListener("mouseleave", hideTip);
+      svg.appendChild(dot);
+    }
+  }
+  function showTip(node, entry) {
+    const tip = document.getElementById("tooltip");
+    tip.textContent = `${fmtTimeFull(entry.t)} · ${mood(entry.m).emoji} ${mood(entry.m).label}${entry.why ? " — " + entry.why : ""}`;
+    tip.style.display = "block";
+    const wrap = document.getElementById("chartWrap").getBoundingClientRect();
+    const r = node.getBoundingClientRect();
+    tip.style.left = (r.left - wrap.left + r.width / 2) + "px";
+    tip.style.top = (r.top - wrap.top - 10) + "px";
+    tip.style.transform = "translate(-50%, -100%)";
+  }
+  function hideTip() { const t = document.getElementById("tooltip"); if (t) t.style.display = "none"; }
+
+  function renderList() {
+    const box = document.getElementById("listBody");
+    const entries = visibleEntries().sort((a, b) => b.t - a.t);
+    if (entries.length === 0) { box.innerHTML = `<div class="empty"><span class="big">😐</span>Click a mood in the bar above to start tracking.</div>`; return; }
+    const rows = entries.map(e => `
+      <tr>
+        <td class="time">${fmtTimeFull(e.t)}</td>
+        <td><span class="dot" style="background:${mood(e.m).color}"></span>${mood(e.m).emoji} ${mood(e.m).label}${e.why ? `<div class="why">${escapeHtml(e.why)}</div>` : ""}</td>
+        <td class="del"><button data-del="${e.id}" title="Delete this entry" aria-label="Delete">×</button></td>
+      </tr>`).join("");
+    box.innerHTML = `<table><thead><tr><th>Time</th><th>Mood</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+    box.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => deleteEntry(b.dataset.del)));
+  }
+
+  /* ---- wire up + boot ------------------------------------------------- */
+  document.getElementById("exportBtn").addEventListener("click", exportCsv);
+  document.getElementById("clearBtn").addEventListener("click", clearAll);
+  document.getElementById("daySelect").addEventListener("change", render);
+
+  (async () => {
+    const online = await store.init();
+    setConn(online);
+    state.entries = await store.list();
+    render();
+  })();
+  </script>
+</body>
+</html>

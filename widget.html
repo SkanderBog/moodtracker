@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mood</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; user-select: none; }
+
+  /* the draggable pill */
+  #pill {
+    display: flex; align-items: center; gap: 2px; padding: 6px;
+    border-radius: 999px;
+    background: rgba(252,252,251,0.94);
+    box-shadow: 0 2px 14px rgba(0,0,0,0.28);
+    border: 1px solid rgba(0,0,0,0.10);
+    width: max-content;
+    -webkit-app-region: drag;
+  }
+  @media (prefers-color-scheme: dark) {
+    #pill { background: rgba(26,26,25,0.94); border-color: rgba(255,255,255,0.14); }
+  }
+
+  #status {
+    width: 9px; height: 9px; border-radius: 50%; margin: 0 6px 0 4px;
+    background: #c3c2b7; flex: none;
+  }
+  #status.online { background: #0ca30c; }
+
+  #pill button {
+    width: 32px; height: 32px; border: none; border-radius: 50%;
+    background: transparent; cursor: pointer; font-size: 17px; line-height: 1; padding: 0;
+    transition: transform .08s ease;
+    -webkit-app-region: no-drag;
+  }
+  #pill button:hover { background: rgba(0,0,0,0.08); }
+  @media (prefers-color-scheme: dark) { #pill button:hover { background: rgba(255,255,255,0.10); } }
+  #pill button.mt-active { background: rgba(0,0,0,0.12); }
+  @media (prefers-color-scheme: dark) { #pill button.mt-active { background: rgba(255,255,255,0.16); } }
+  #pill button.flash { transform: scale(1.28); }
+  #pill .sep { width: 1px; height: 18px; background: rgba(0,0,0,0.12); margin: 0 3px; }
+  @media (prefers-color-scheme: dark) { #pill .sep { background: rgba(255,255,255,0.14); } }
+
+  /* collapsed: hide everything except the 🌤 handle */
+  body.collapsed #pill button.hide, body.collapsed #pill .sep, body.collapsed #status { display: none; }
+
+  /* optional "why" input, revealed below the pill when logging */
+  #why { display: none; margin-top: 6px; -webkit-app-region: no-drag; }
+  #why input {
+    font: inherit; font-size: 13px; width: 100%;
+    padding: 7px 11px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.15);
+    background: rgba(252,252,251,0.97); outline: none; color: #0b0b0b;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  }
+  @media (prefers-color-scheme: dark) {
+    #why input { background: rgba(26,26,25,0.97); color: #fff; border-color: rgba(255,255,255,0.2); }
+  }
+</style>
+</head>
+<body>
+  <div id="pill">
+    <span id="status" title="shared log online"></span>
+    <button class="hide" data-m="1" title="Very sad">😢</button>
+    <button class="hide" data-m="2" title="Sad">🙁</button>
+    <button class="hide" data-m="3" title="Neutral">😐</button>
+    <button class="hide" data-m="4" title="Happy">🙂</button>
+    <button class="hide" data-m="5" title="Very happy">😄</button>
+    <span class="sep"></span>
+    <button class="hide" id="hist" title="Open full timeline">📊</button>
+    <button id="collapse" title="Collapse">—</button>
+    <button class="hide" id="quit" title="Quit">✕</button>
+  </div>
+  <div id="why"><input id="whyInput" placeholder="Why? (optional)"></div>
+
+  <script src="client-store.js"></script>
+  <script>
+    (function () {
+      "use strict";
+      const SERVER = "http://localhost:8686";
+      const MOODS = [
+        { level: 1, emoji: "😢", label: "Very sad"  },
+        { level: 2, emoji: "🙁", label: "Sad"       },
+        { level: 3, emoji: "😐", label: "Neutral"   },
+        { level: 4, emoji: "🙂", label: "Happy"     },
+        { level: 5, emoji: "😄", label: "Very happy" },
+      ];
+      const mood = (m) => MOODS[m - 1];
+      const store = window.MoodStore;
+      const genId = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + "-" + Math.random().toString(36).slice(2));
+
+      const pill = document.getElementById("pill");
+      const status = document.getElementById("status");
+      const whyBox = document.getElementById("why");
+      const whyInput = document.getElementById("whyInput");
+
+      /* ---- logging ---- */
+      async function logMood(level) {
+        const entry = { id: genId(), t: Date.now(), m: level };
+        await store.add(entry);
+        const b = pill.querySelector(`[data-m="${level}"]`);
+        b.classList.remove("flash"); void b.offsetWidth; b.classList.add("flash");
+        askWhy(entry);
+      }
+
+      let whyDone = false;
+      function askWhy(entry) {
+        whyInput.value = "";
+        whyBox.style.display = "block";
+        setExpanded(true);
+        whyDone = false;
+        const finish = (saveIt) => {
+          if (whyDone) return; whyDone = true;
+          if (saveIt && whyInput.value.trim()) {
+            entry.why = whyInput.value.trim();
+            store.update(entry.id, { why: entry.why });
+          }
+          whyBox.style.display = "none";
+          setExpanded(false);
+          whyInput.onkeydown = whyInput.onblur = null;
+        };
+        whyInput.onkeydown = (e) => {
+          if (e.key === "Enter") { e.preventDefault(); finish(true); }
+          else if (e.key === "Escape") finish(false);
+        };
+        whyInput.onblur = () => finish(whyInput.value.trim() !== "");
+        setTimeout(() => finish(whyInput.value.trim() !== ""), 20000);
+        whyInput.focus();
+      }
+
+      /* ---- collapse / expand (resize via main process) ---- */
+      function setCollapsed(c) {
+        document.body.classList.toggle("collapsed", c);
+        document.getElementById("collapse").textContent = c ? "🌤" : "—";
+        if (window.mt) window.mt.setCollapsed(c);
+      }
+      function setExpanded(e) {
+        if (window.mt) window.mt.setExpanded(e);
+      }
+
+      function openHistory() {
+        if (window.mt) window.mt.openHistory();
+        else window.open(SERVER + "/", "_blank");
+      }
+
+      /* ---- wire up ---- */
+      pill.querySelectorAll("[data-m]").forEach((b) =>
+        b.addEventListener("click", () => logMood(Number(b.dataset.m))));
+      document.getElementById("hist").addEventListener("click", openHistory);
+      document.getElementById("collapse").addEventListener("click", () => {
+        setCollapsed(!document.body.classList.contains("collapsed"));
+      });
+      document.getElementById("quit").addEventListener("click", () => {
+        if (window.mt) window.mt.quit();
+      });
+
+      /* ---- boot ---- */
+      (async () => {
+        const online = await store.init();
+        status.classList.toggle("online", online);
+        status.title = online ? "Shared log online" : "Server not running — saving locally only";
+      })();
+    })();
+  </script>
+</body>
+</html>

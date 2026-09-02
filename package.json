@@ -1,0 +1,49 @@
+{
+  "name": "mood-tracker",
+  "version": "1.0.0",
+  "description": "Always-on-top mood tracker bar (Electron) + shared-log server",
+  "main": "main.js",
+  "author": "SkanderBog <317299592+SkanderBog@users.noreply.github.com>",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "server": "node server.js",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.skanderbog.moodtracker",
+    "productName": "MoodTracker",
+    "files": [
+      "**/*",
+      "!data/**",
+      "!dist/**",
+      "!.github/**",
+      "!README.md",
+      "!NOTES.md"
+    ],
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility"
+    }
+  },
+  "devDependencies": {
+    "electron": "^44.1.1",
+    "electron-builder": "^26.15.3"
+  }
+}
