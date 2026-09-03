@@ -6,7 +6,7 @@
   "author": "SkanderBog <317299592+SkanderBog@users.noreply.github.com>",
   "license": "MIT",
   "scripts": {
-    "start": "electron .",
+    "start": "electron . --no-sandbox --ozone-platform=x11",
     "server": "node server.js",
     "dist": "electron-builder"
   },
@@ -39,7 +39,11 @@
         "AppImage",
         "deb"
       ],
-      "category": "Utility"
+      "category": "Utility",
+      "executableArgs": [
+        "--ozone-platform=x11",
+        "--no-sandbox"
+      ]
     }
   },
   "devDependencies": {
