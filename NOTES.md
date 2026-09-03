@@ -53,3 +53,9 @@ GitHub Releases with the build job's read-only `GITHUB_TOKEN` → `403 Forbidden
 ("Resource not accessible by integration"). Fix: `"publish": null` in the build
 config, so electron-builder never publishes and the `release` job (which has
 `contents: write`) uploads the artifacts as a draft release instead.
+
+Second CI fix: the build job uploaded `dist/*`, which includes the unpacked app
+folders (`win-unpacked`, `mac-arm64`, `linux-unpacked`) — hundreds of `.pak`/`.dll`/
+framework files. The release job then tried to upload all of them (104 assets) and
+failed on cross-OS filename collisions. The upload-artifact `path` is now narrowed
+to just the installers: `dist/*.{exe,dmg,AppImage,deb,zip}`.
