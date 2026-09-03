@@ -88,3 +88,44 @@ Stopping the widget (✕) also stops the server it runs.
   `mood-tracker.local`) and syncs back on reconnect.
 - **Export**: the timeline page exports CSV (includes the "why" column).
 - **Port**: 8686 by default; override with `PORT=… node server.js`.
+
+## Troubleshooting
+
+**The widget won't stay on top / shows a black or opaque background (Linux).**
+This happens on Wayland desktops (GNOME, KDE Plasma, etc.): Electron's native
+Wayland backend has no "always on top" and many compositors lack per-pixel
+transparency. The `start` script and the packaged Linux build already force
+X11/XWayland for you. If you launch `electron .` by hand, add
+`--ozone-platform=x11`.
+
+**"The SUID sandbox helper binary ... is not configured correctly" (Linux).**
+Electron refuses to start unless its `chrome-sandbox` is root-owned with the
+setuid bit, or you pass `--no-sandbox`. `npm start` already passes
+`--no-sandbox`; the packaged `.deb` sets the sandbox up on install and the
+AppImage skips it internally, so this only bites when running the raw binary.
+
+**macOS: "can't be opened because Apple cannot check it for malicious software."**
+The build is unsigned. Right-click the app → **Open**, or System Settings →
+Privacy & Security → **Open Anyway**.
+
+**Windows: "Windows protected your PC" (SmartScreen).**
+Also because the build is unsigned. Click **More info → Run anyway**.
+
+**`npm install` hangs while "Downloading Electron binary..." (China).**
+GitHub's release host is blocked/dropped on some networks. Use the mirror:
+```bash
+ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ npm install
+```
+(or `ELECTRON_MIRROR=… node node_modules/electron/install.js` if the packages
+are already installed).
+
+**`EADDRINUSE` / "port 8686 is already in use".**
+Another copy of the server (or the widget, which runs it in-process) is still
+running. Close it, or run standalone on a different port with
+`PORT=8687 node server.js` (and point clients at the new port).
+
+**The status dot is gray / "saving locally only".**
+The shared-log server isn't reachable, so the client fell back to its local
+store. It will push the backlog back to the server the next time it connects.
+Check the terminal that launched the widget for a server error (usually the
+port being taken).

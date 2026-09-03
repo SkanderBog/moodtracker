@@ -14,10 +14,12 @@
     "appId": "com.skanderbog.moodtracker",
     "productName": "MoodTracker",
     "publish": null,
+    "icon": "build/icon.png",
     "files": [
       "**/*",
       "!data/**",
       "!dist/**",
+      "!build/**",
       "!.github/**",
       "!README.md",
       "!NOTES.md"
