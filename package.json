@@ -13,6 +13,7 @@
   "build": {
     "appId": "com.skanderbog.moodtracker",
     "productName": "MoodTracker",
+    "publish": null,
     "files": [
       "**/*",
       "!data/**",

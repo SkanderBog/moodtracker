@@ -46,3 +46,10 @@ this machine (Ubuntu, Wayland/GNOME). All fixed in dev:
    'x11')` in `main.js` is **too late** — Chromium picks its backend before JS
    runs, and the half-applied switch segfaulted the GPU process. The flag has to
    be a real command-line arg, hence `--ozone-platform=x11` in the `start` script.
+
+CI note: the first tag build (2026-09-02) **failed** — the installers actually
+built fine, but electron-builder saw the `v*` git tag and auto-published to
+GitHub Releases with the build job's read-only `GITHUB_TOKEN` → `403 Forbidden`
+("Resource not accessible by integration"). Fix: `"publish": null` in the build
+config, so electron-builder never publishes and the `release` job (which has
+`contents: write`) uploads the artifacts as a draft release instead.
