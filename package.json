@@ -1,6 +1,6 @@
 {
   "name": "mood-tracker",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Always-on-top mood tracker bar (Electron) + shared-log server",
   "main": "main.js",
   "author": "SkanderBog <317299592+SkanderBog@users.noreply.github.com>",
