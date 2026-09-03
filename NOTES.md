@@ -21,9 +21,11 @@ Goal: push to GitHub (private repo) and ship downloadable installers for all thr
 
 Next / TODO:
 - [x] Run `npm start` on a real desktop to smoke-test the widget.
-- [ ] Tag `v1.0.0` and push to trigger the first CI release; check the three installers.
+- [x] Tag `v1.0.0`, push, and publish the release — Windows/macOS/Linux installers
+  live at https://github.com/SkanderBog/moodtracker/releases/tag/v1.0.0.
+- [x] Packaged Linux Wayland fix — done via `linux.executableArgs`.
 - [ ] macOS is unsigned → first launch needs right-click → Open. Windows may warn → More info → Run anyway.
-- [ ] Packaged Linux app still needs the Wayland fix (see below) — `executableArgs` / `--ozone-platform=x11` on the release build, not just dev.
+- [ ] (maybe) make the repo public if the release should be downloadable by others, not just the owner.
 
 ## 2026-09-03 — first smoke test on Linux/Wayland
 
